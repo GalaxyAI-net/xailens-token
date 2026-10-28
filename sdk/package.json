@@ -1,0 +1,39 @@
+{
+  "name": "@xailens/solana-sdk",
+  "version": "0.2.0",
+  "description": "TypeScript SDK for the XAILENS token (Token-2022) and the xailens-lock program on Solana",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist/"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "clean": "rm -rf dist",
+    "typecheck": "tsc --noEmit",
+    "test": "tsc && node --test \"dist/**/*.test.js\""
+  },
+  "dependencies": {
+    "@coral-xyz/anchor": "^0.31.1",
+    "@solana/spl-token": "^0.4.13",
+    "@solana/web3.js": "^1.98.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "typescript": "^5.5.0"
+  },
+  "keywords": [
+    "solana",
+    "xailens",
+    "token-2022",
+    "lock",
+    "utility-token"
+  ],
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/GalaxyAI-net/xailens-token.git",
+    "directory": "sdk"
+  },
+  "author": "xAILens"
+}

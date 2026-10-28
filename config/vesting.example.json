@@ -1,0 +1,48 @@
+{
+  "_comment": "Example only. The real file lives in private/config/vesting.json (gitignored) because it holds recipient wallets. Pass VESTING_CONFIG=private/config/vesting.json to scripts/create-vesting-streams.ts.",
+  "tgeTimestamp": 1801234800,
+  "buckets": [
+    {
+      "label": "Team",
+      "tgePercent": 0,
+      "cliffDays": 365,
+      "vestDays": 730,
+      "recipients": [
+        {
+          "name": "xailens-dev",
+          "address": "TODO",
+          "tokens": 70000000
+        }
+      ]
+    },
+    {
+      "label": "Advisors",
+      "tgePercent": 0,
+      "cliffDays": 180,
+      "vestDays": 365,
+      "recipients": [
+        {
+          "name": "xailens-advisors",
+          "address": "TODO",
+          "tokens": 15000000
+        }
+      ]
+    },
+    {
+      "label": "Private round",
+      "tgePercent": 10,
+      "cliffDays": 0,
+      "vestDays": 180,
+      "recipients": [],
+      "_comment": "Append one entry per participant as the round closes: {\"name\",\"address\",\"tokens\"} where tokens = USDC / 0.01."
+    }
+  ],
+  "lpLock": {
+    "_comment": "Raydium CPMM LP mint and the multisig vault that receives the LP after 12 months.",
+    "lpMint": "TODO",
+    "recipient": "TODO_SQUADS_VAULT",
+    "lpAmountRaw": "TODO",
+    "lockDays": 365
+  },
+  "_tge_human": "2027-01-29T15:00:00Z (16:00 CET, 10:00 ET, 22:00 Vietnam; decided 2026-10-28)"
+}

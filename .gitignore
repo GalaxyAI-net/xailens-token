@@ -1,0 +1,44 @@
+# Dependencies
+node_modules/
+
+# Build artifacts
+dist/
+target/
+*.so
+sdk/dist/
+
+# Solana / Anchor
+.anchor/
+test-ledger/
+
+# Secrets and keypairs
+.env
+.env.*
+.env.local
+.env.production
+*.secret
+*.pem
+*keypair*.json
+id.json
+.keys/
+keys/
+
+# OS
+.DS_Store
+*.log
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Lockfiles are committed on purpose (reproducible builds for auditors):
+# package-lock.json and Cargo.lock must NOT be ignored.
+
+# Internal material: launchpad applications, runbooks, legal notes, deck, recipient wallets, assistant instructions.
+private/
+CLAUDE.md
+config/vesting.json
+config/streams-mainnet.json

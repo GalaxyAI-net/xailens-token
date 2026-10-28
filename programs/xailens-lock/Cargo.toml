@@ -1,0 +1,21 @@
+[package]
+name = "xailens-lock"
+version = "0.2.0"
+description = "XAILENS token lock program (Solana, Anchor). Locks tokens to prove a holding threshold; no reward emission."
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib", "lib"]
+name = "xailens_lock"
+
+[features]
+no-entrypoint = []
+no-idl = []
+no-log-ix-name = []
+cpi = ["no-entrypoint"]
+default = []
+idl-build = ["anchor-lang/idl-build", "anchor-spl/idl-build"]
+
+[dependencies]
+anchor-lang = { version = "0.31.1", features = ["init-if-needed"] }
+anchor-spl = { version = "0.31.1" }

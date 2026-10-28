@@ -1,0 +1,16 @@
+[
+  {
+    "bucket": "Team",
+    "name": "team-test",
+    "recipient": "24ypt7GxvDFwwuVALB5kpcEJTYdSbapPSDydTgeMfqBb",
+    "stream": "D18BpJyFh6474vjRd8GKWdqKi3ufUgFmSo8pQabpkqYi",
+    "tx": "nWgGM1KCejmAVKUNnth2THojpY9cW97T75Bi1rnRqJSkLeN3K7hni669s6CuvqHc1x6aEEcC3vFfVjP6SrFjEwe"
+  },
+  {
+    "bucket": "Private round",
+    "name": "private-test",
+    "recipient": "8DfqtnFiimWgvn5cZ49PQHq9m6cmJqBL1zBwtUJdBqia",
+    "stream": "Bb3S9F5Dh65AjHB2ofG7NyANAWE2G2tZaPyCdd65MxUV",
+    "tx": "5v3kj9S5A5hfkxVktLLKUPgBMsK6qeUXvWHYdV6i8ChtgncoHyABdahrKLFWXnMDpojz1tGb8NThuCSjmU3g4ebz"
+  }
+]

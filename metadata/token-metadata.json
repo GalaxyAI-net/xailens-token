@@ -1,0 +1,22 @@
+{
+  "name": "XAILENS",
+  "symbol": "XAILENS",
+  "description": "Utility token for the xAILens trading-intelligence platform: subscription discount, feature governance and Founder-level access for holders who lock XAILENS.",
+  "image": "https://xailens.com/token-logo.png",
+  "external_url": "https://xailens.com",
+  "attributes": [
+    { "trait_type": "Decimals", "value": "6" },
+    { "trait_type": "Total Supply", "value": "500000000" },
+    { "trait_type": "Network", "value": "Solana" },
+    { "trait_type": "Program", "value": "Token-2022" }
+  ],
+  "properties": {
+    "category": "utility-token",
+    "creators": [
+      {
+        "address": "3qqAyWYZ3vGNA2nHw25Yp1bR3eiGRRmfjLgT3S7eWdne",
+        "share": 100
+      }
+    ]
+  }
+}

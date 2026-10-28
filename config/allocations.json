@@ -1,0 +1,48 @@
+{
+  "_comment": "Decided 2026-10-29 (launchpad scenario). Destinations: Squads vault address, launchpad claim wallet, or null for buckets vested via Streamflow from the deployer wallet (scripts/create-vesting-streams.ts). Fill TODO entries before mainnet.",
+  "totalSupply": 500000000,
+  "allocations": [
+    {
+      "label": "Private round",
+      "tokens": 40000000,
+      "destination": null,
+      "description": "KOL and angels at 0.01 USD. 10% at TGE, linear 6 months via Streamflow from the deployer wallet."
+    },
+    {
+      "label": "Public sale",
+      "tokens": 50000000,
+      "destination": "TODO_LAUNCHPAD_CLAIM_WALLET",
+      "description": "Launchpad public sale at 0.02 USD. Delivered to the launchpad claim contract; 25% at TGE, linear 3 months or the launchpad's standard."
+    },
+    {
+      "label": "Liquidity",
+      "tokens": 70000000,
+      "destination": "TODO_SQUADS_VAULT",
+      "description": "25M into the Raydium CPMM pool with 500,000 USDC at TGE (LP locked 12 months), 45M reserved in the vault for later venues."
+    },
+    {
+      "label": "Team",
+      "tokens": 70000000,
+      "destination": null,
+      "description": "Cliff 12 months, linear 24 months via Streamflow."
+    },
+    {
+      "label": "Advisors",
+      "tokens": 15000000,
+      "destination": null,
+      "description": "Cliff 6 months, linear 12 months via Streamflow."
+    },
+    {
+      "label": "Ecosystem and community rewards",
+      "tokens": 130000000,
+      "destination": "TODO_SQUADS_VAULT",
+      "description": "5% at TGE, linear 36 months, released monthly by the multisig."
+    },
+    {
+      "label": "Treasury and operations",
+      "tokens": 125000000,
+      "destination": "TODO_SQUADS_VAULT",
+      "description": "5% at TGE, linear 24 months, released monthly by the multisig."
+    }
+  ]
+}

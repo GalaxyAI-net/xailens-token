@@ -1,0 +1,38 @@
+{
+  "name": "xailens-token",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": [
+    "sdk"
+  ],
+  "scripts": {
+    "build": "anchor build",
+    "test": "anchor test",
+    "test:sdk": "npm --workspace sdk test",
+    "build:sdk": "npm --workspace sdk run build",
+    "typecheck": "tsc --noEmit -p tsconfig.json && npm --workspace sdk run typecheck",
+    "deploy:devnet": "anchor deploy --provider.cluster devnet"
+  },
+  "dependencies": {
+    "@coral-xyz/anchor": "^0.31.1",
+    "@metaplex-foundation/mpl-token-metadata": "^2.13.0",
+    "@solana/spl-token": "^0.4.13",
+    "@solana/spl-token-metadata": "^0.1.6",
+    "@solana/web3.js": "^1.98.0",
+    "@streamflow/stream": "^13.4.0",
+    "@types/bn.js": "^5.2.0",
+    "bn.js": "^5.2.1"
+  },
+  "devDependencies": {
+    "@types/chai": "^4.3.0",
+    "@types/mocha": "^10.0.0",
+    "@types/node": "^20.0.0",
+    "chai": "^4.3.0",
+    "mocha": "^10.0.0",
+    "ts-mocha": "^10.0.0",
+    "ts-node": "^10.9.0",
+    "tsx": "^4.0.0",
+    "typescript": "^5.5.0",
+    "@types/bn.js": "^5.1.6"
+  }
+}

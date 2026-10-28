@@ -1,0 +1,1107 @@
+{
+  "address": "6urQa7RwSR1nW9tbYkGpaLznWL7WuFSmGHmwJZWcXTA9",
+  "metadata": {
+    "name": "xailens_lock",
+    "version": "0.2.0",
+    "spec": "0.1.0",
+    "description": "XAILENS token lock program (Solana, Anchor). Locks tokens to prove a holding threshold; no reward emission."
+  },
+  "instructions": [
+    {
+      "name": "accept_authority",
+      "docs": [
+        "Step 2 of authority transfer: the proposed authority accepts."
+      ],
+      "discriminator": [
+        107,
+        86,
+        198,
+        91,
+        33,
+        12,
+        107,
+        160
+      ],
+      "accounts": [
+        {
+          "name": "new_authority",
+          "signer": true
+        },
+        {
+          "name": "pool",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  108,
+                  111,
+                  99,
+                  107,
+                  95,
+                  112,
+                  111,
+                  111,
+                  108
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "close_lock_account",
+      "docs": [
+        "Close an empty lock account and return its rent to the owner."
+      ],
+      "discriminator": [
+        147,
+        250,
+        205,
+        58,
+        255,
+        181,
+        210,
+        3
+      ],
+      "accounts": [
+        {
+          "name": "user",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "lock_account",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  108,
+                  111,
+                  99,
+                  107
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "user"
+              }
+            ]
+          }
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "initialize",
+      "docs": [
+        "Create the single lock pool. Callable once, only by the program's",
+        "upgrade authority, so nobody can front-run pool creation."
+      ],
+      "discriminator": [
+        175,
+        175,
+        109,
+        31,
+        13,
+        152,
+        155,
+        237
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "mint"
+        },
+        {
+          "name": "pool",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  108,
+                  111,
+                  99,
+                  107,
+                  95,
+                  112,
+                  111,
+                  111,
+                  108
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "vault",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "pool"
+              }
+            ]
+          }
+        },
+        {
+          "name": "program",
+          "docs": [
+            "This program, used to locate its ProgramData account."
+          ],
+          "address": "6urQa7RwSR1nW9tbYkGpaLznWL7WuFSmGHmwJZWcXTA9"
+        },
+        {
+          "name": "program_data",
+          "docs": [
+            "The signer must be the program's upgrade authority."
+          ]
+        },
+        {
+          "name": "token_program"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "params",
+          "type": {
+            "defined": {
+              "name": "PoolParams"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "lock",
+      "docs": [
+        "Lock `amount` XAILENS. Adds to any existing lock. Blocked while the pool",
+        "is paused or while an unlock request is pending."
+      ],
+      "discriminator": [
+        21,
+        19,
+        208,
+        43,
+        237,
+        62,
+        255,
+        87
+      ],
+      "accounts": [
+        {
+          "name": "user",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "pool",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  108,
+                  111,
+                  99,
+                  107,
+                  95,
+                  112,
+                  111,
+                  111,
+                  108
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "mint"
+        },
+        {
+          "name": "lock_account",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  108,
+                  111,
+                  99,
+                  107
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "user"
+              }
+            ]
+          }
+        },
+        {
+          "name": "user_token_account",
+          "writable": true
+        },
+        {
+          "name": "vault",
+          "writable": true
+        },
+        {
+          "name": "token_program"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "amount",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "propose_authority",
+      "docs": [
+        "Admin: step 1 of authority transfer (for example to a Squads multisig)."
+      ],
+      "discriminator": [
+        20,
+        148,
+        236,
+        198,
+        76,
+        119,
+        99,
+        142
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "signer": true,
+          "relations": [
+            "pool"
+          ]
+        },
+        {
+          "name": "pool",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  108,
+                  111,
+                  99,
+                  107,
+                  95,
+                  112,
+                  111,
+                  111,
+                  108
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "args": [
+        {
+          "name": "new_authority",
+          "type": "pubkey"
+        }
+      ]
+    },
+    {
+      "name": "request_unlock",
+      "docs": [
+        "Start the unlock cooldown. The cooldown length is snapshotted so a",
+        "later admin change cannot extend a pending request. Threshold clocks",
+        "reset: an unlocking wallet no longer counts as holding."
+      ],
+      "discriminator": [
+        114,
+        219,
+        84,
+        115,
+        190,
+        220,
+        130,
+        240
+      ],
+      "accounts": [
+        {
+          "name": "user",
+          "signer": true
+        },
+        {
+          "name": "pool",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  108,
+                  111,
+                  99,
+                  107,
+                  95,
+                  112,
+                  111,
+                  111,
+                  108
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "lock_account",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  108,
+                  111,
+                  99,
+                  107
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "user"
+              }
+            ]
+          }
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "update_pool",
+      "docs": [
+        "Admin: update pool parameters. Cannot touch pending unlock requests."
+      ],
+      "discriminator": [
+        239,
+        214,
+        170,
+        78,
+        36,
+        35,
+        30,
+        34
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "signer": true,
+          "relations": [
+            "pool"
+          ]
+        },
+        {
+          "name": "pool",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  108,
+                  111,
+                  99,
+                  107,
+                  95,
+                  112,
+                  111,
+                  111,
+                  108
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "args": [
+        {
+          "name": "update",
+          "type": {
+            "defined": {
+              "name": "PoolUpdate"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "withdraw",
+      "docs": [
+        "Withdraw the full locked amount after the cooldown. Never blocked by",
+        "pause."
+      ],
+      "discriminator": [
+        183,
+        18,
+        70,
+        156,
+        148,
+        109,
+        161,
+        34
+      ],
+      "accounts": [
+        {
+          "name": "user",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "pool",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  108,
+                  111,
+                  99,
+                  107,
+                  95,
+                  112,
+                  111,
+                  111,
+                  108
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "mint"
+        },
+        {
+          "name": "lock_account",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  108,
+                  111,
+                  99,
+                  107
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "user"
+              }
+            ]
+          }
+        },
+        {
+          "name": "user_token_account",
+          "writable": true
+        },
+        {
+          "name": "vault",
+          "writable": true
+        },
+        {
+          "name": "token_program"
+        }
+      ],
+      "args": []
+    }
+  ],
+  "accounts": [
+    {
+      "name": "LockAccount",
+      "discriminator": [
+        223,
+        64,
+        71,
+        124,
+        255,
+        86,
+        118,
+        192
+      ]
+    },
+    {
+      "name": "LockPool",
+      "discriminator": [
+        57,
+        9,
+        171,
+        89,
+        205,
+        211,
+        78,
+        84
+      ]
+    }
+  ],
+  "events": [
+    {
+      "name": "AuthorityProposed",
+      "discriminator": [
+        244,
+        117,
+        94,
+        112,
+        53,
+        151,
+        35,
+        89
+      ]
+    },
+    {
+      "name": "AuthorityTransferred",
+      "discriminator": [
+        245,
+        109,
+        179,
+        54,
+        135,
+        92,
+        22,
+        64
+      ]
+    },
+    {
+      "name": "Locked",
+      "discriminator": [
+        188,
+        53,
+        118,
+        62,
+        64,
+        12,
+        198,
+        84
+      ]
+    },
+    {
+      "name": "PoolInitialized",
+      "discriminator": [
+        100,
+        118,
+        173,
+        87,
+        12,
+        198,
+        254,
+        229
+      ]
+    },
+    {
+      "name": "PoolUpdated",
+      "discriminator": [
+        218,
+        43,
+        210,
+        231,
+        127,
+        214,
+        72,
+        245
+      ]
+    },
+    {
+      "name": "UnlockRequested",
+      "discriminator": [
+        252,
+        169,
+        137,
+        168,
+        202,
+        229,
+        90,
+        213
+      ]
+    },
+    {
+      "name": "Withdrawn",
+      "discriminator": [
+        20,
+        89,
+        223,
+        198,
+        194,
+        124,
+        219,
+        13
+      ]
+    }
+  ],
+  "errors": [
+    {
+      "code": 6000,
+      "name": "BelowMinimumLock",
+      "msg": "Lock amount is below the minimum of 1 XAILENS"
+    },
+    {
+      "code": 6001,
+      "name": "NothingLocked",
+      "msg": "Nothing is locked"
+    },
+    {
+      "code": 6002,
+      "name": "StillLocked",
+      "msg": "Lock account still holds tokens"
+    },
+    {
+      "code": 6003,
+      "name": "CooldownNotElapsed",
+      "msg": "Cooldown period has not elapsed yet"
+    },
+    {
+      "code": 6004,
+      "name": "NoUnlockRequested",
+      "msg": "No unlock has been requested"
+    },
+    {
+      "code": 6005,
+      "name": "UnlockAlreadyRequested",
+      "msg": "Unlock has already been requested"
+    },
+    {
+      "code": 6006,
+      "name": "Unauthorized",
+      "msg": "Not authorized"
+    },
+    {
+      "code": 6007,
+      "name": "Overflow",
+      "msg": "Arithmetic overflow"
+    },
+    {
+      "code": 6008,
+      "name": "InvalidCooldown",
+      "msg": "Cooldown must be between 1 second and 30 days"
+    },
+    {
+      "code": 6009,
+      "name": "InvalidThresholds",
+      "msg": "Discount threshold must not exceed Founder threshold"
+    },
+    {
+      "code": 6010,
+      "name": "InvalidAuthority",
+      "msg": "Invalid authority"
+    },
+    {
+      "code": 6011,
+      "name": "PoolPaused",
+      "msg": "The pool is paused: no new locks (withdrawals still work)"
+    }
+  ],
+  "types": [
+    {
+      "name": "AuthorityProposed",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "current",
+            "type": "pubkey"
+          },
+          {
+            "name": "proposed",
+            "type": "pubkey"
+          }
+        ]
+      }
+    },
+    {
+      "name": "AuthorityTransferred",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "previous",
+            "type": "pubkey"
+          },
+          {
+            "name": "current",
+            "type": "pubkey"
+          }
+        ]
+      }
+    },
+    {
+      "name": "LockAccount",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "owner",
+            "type": "pubkey"
+          },
+          {
+            "name": "amount",
+            "docs": [
+              "Raw locked amount."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "locked_since",
+            "docs": [
+              "When the current lock started (first deposit after an empty state)."
+            ],
+            "type": "i64"
+          },
+          {
+            "name": "last_deposit_at",
+            "docs": [
+              "Most recent deposit."
+            ],
+            "type": "i64"
+          },
+          {
+            "name": "discount_since",
+            "docs": [
+              "When the discount threshold was first met. 0 = not met."
+            ],
+            "type": "i64"
+          },
+          {
+            "name": "founder_since",
+            "docs": [
+              "When the Founder threshold was first met. 0 = not met."
+            ],
+            "type": "i64"
+          },
+          {
+            "name": "voting_since",
+            "docs": [
+              "When the voting threshold was first met. 0 = not met."
+            ],
+            "type": "i64"
+          },
+          {
+            "name": "unlock_requested_at",
+            "docs": [
+              "When unlock was requested. 0 = no pending request."
+            ],
+            "type": "i64"
+          },
+          {
+            "name": "unlock_cooldown",
+            "docs": [
+              "Cooldown snapshotted at request time."
+            ],
+            "type": "i64"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "LockPool",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "authority",
+            "type": "pubkey"
+          },
+          {
+            "name": "pending_authority",
+            "type": "pubkey"
+          },
+          {
+            "name": "mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "vault",
+            "type": "pubkey"
+          },
+          {
+            "name": "cooldown_period",
+            "type": "i64"
+          },
+          {
+            "name": "discount_threshold",
+            "type": "u64"
+          },
+          {
+            "name": "founder_threshold",
+            "type": "u64"
+          },
+          {
+            "name": "voting_threshold",
+            "type": "u64"
+          },
+          {
+            "name": "total_locked",
+            "type": "u64"
+          },
+          {
+            "name": "paused",
+            "type": "bool"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Locked",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "user",
+            "type": "pubkey"
+          },
+          {
+            "name": "amount",
+            "type": "u64"
+          },
+          {
+            "name": "total_locked",
+            "type": "u64"
+          },
+          {
+            "name": "discount_since",
+            "type": "i64"
+          },
+          {
+            "name": "founder_since",
+            "type": "i64"
+          },
+          {
+            "name": "voting_since",
+            "type": "i64"
+          },
+          {
+            "name": "timestamp",
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "PoolInitialized",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "authority",
+            "type": "pubkey"
+          },
+          {
+            "name": "mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "cooldown_period",
+            "type": "i64"
+          },
+          {
+            "name": "discount_threshold",
+            "type": "u64"
+          },
+          {
+            "name": "founder_threshold",
+            "type": "u64"
+          },
+          {
+            "name": "voting_threshold",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "PoolParams",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "cooldown_period",
+            "docs": [
+              "Unlock cooldown in seconds (1 ..= MAX_COOLDOWN)."
+            ],
+            "type": "i64"
+          },
+          {
+            "name": "discount_threshold",
+            "docs": [
+              "Raw amount (6 decimals) that qualifies for the subscription discount. 0 disables."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "founder_threshold",
+            "docs": [
+              "Raw amount that qualifies for Founder-level benefits. 0 disables."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "voting_threshold",
+            "docs": [
+              "Raw amount that qualifies for feature voting. 0 disables."
+            ],
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "PoolUpdate",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "cooldown_period",
+            "type": {
+              "option": "i64"
+            }
+          },
+          {
+            "name": "discount_threshold",
+            "type": {
+              "option": "u64"
+            }
+          },
+          {
+            "name": "founder_threshold",
+            "type": {
+              "option": "u64"
+            }
+          },
+          {
+            "name": "voting_threshold",
+            "type": {
+              "option": "u64"
+            }
+          },
+          {
+            "name": "paused",
+            "type": {
+              "option": "bool"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "PoolUpdated",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "cooldown_period",
+            "type": "i64"
+          },
+          {
+            "name": "discount_threshold",
+            "type": "u64"
+          },
+          {
+            "name": "founder_threshold",
+            "type": "u64"
+          },
+          {
+            "name": "voting_threshold",
+            "type": "u64"
+          },
+          {
+            "name": "paused",
+            "type": "bool"
+          }
+        ]
+      }
+    },
+    {
+      "name": "UnlockRequested",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "user",
+            "type": "pubkey"
+          },
+          {
+            "name": "amount",
+            "type": "u64"
+          },
+          {
+            "name": "requested_at",
+            "type": "i64"
+          },
+          {
+            "name": "cooldown",
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Withdrawn",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "user",
+            "type": "pubkey"
+          },
+          {
+            "name": "amount",
+            "type": "u64"
+          },
+          {
+            "name": "timestamp",
+            "type": "i64"
+          }
+        ]
+      }
+    }
+  ]
+}
