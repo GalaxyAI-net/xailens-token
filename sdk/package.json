@@ -1,7 +1,7 @@
 {
   "name": "@xailens/solana-sdk",
   "version": "0.2.0",
-  "description": "TypeScript SDK for the XAILENS token (Token-2022) and the xailens-lock program on Solana",
+  "description": "TypeScript SDK for the XAILENS token (legacy SPL or Token-2022) and the xailens-lock program on Solana",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "files": [

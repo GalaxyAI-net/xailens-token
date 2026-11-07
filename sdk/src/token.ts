@@ -8,7 +8,7 @@ import {
   TokenAccountNotFoundError,
 } from "@solana/spl-token";
 
-import { XAILENS_DECIMALS, XAILENS_MINT, XAILENS_TOKEN_PROGRAM_ID, TOKEN_2022_PROGRAM_ID } from "./constants.js";
+import { XAILENS_DECIMALS, LEGACY_TOKEN_PROGRAM_ID, TOKEN_2022_PROGRAM_ID } from "./constants.js";
 
 // ---------------------------------------------------------------------------
 // Amount helpers
@@ -30,16 +30,46 @@ export function toUiAmount(rawAmount: bigint): number {
 }
 
 // ---------------------------------------------------------------------------
+// Token program
+// ---------------------------------------------------------------------------
+
+/** Throws unless `programId` is legacy SPL Token or Token-2022. */
+export function assertSupportedTokenProgram(programId: PublicKey): PublicKey {
+  if (!programId.equals(LEGACY_TOKEN_PROGRAM_ID) && !programId.equals(TOKEN_2022_PROGRAM_ID)) {
+    throw new Error(`${programId.toBase58()} is not a supported token program`);
+  }
+  return programId;
+}
+
+/**
+ * Token program that owns `mint` on-chain. The SDK never takes this from
+ * configuration, so it keeps working across the Token-2022 migration.
+ */
+export async function getTokenProgramForMint(connection: Connection, mint: PublicKey): Promise<PublicKey> {
+  const info = await connection.getAccountInfo(mint, "confirmed");
+  if (!info) throw new Error(`mint ${mint.toBase58()} not found`);
+  try {
+    return assertSupportedTokenProgram(info.owner);
+  } catch {
+    throw new Error(`mint is owned by ${info.owner.toBase58()}, which is not a supported token program`);
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Reads
 // ---------------------------------------------------------------------------
 
-/** Wallet balance (UI amount). 0 when the ATA does not exist. */
+/**
+ * Wallet balance (UI amount). 0 when the ATA does not exist. The token
+ * program is read from the mint's owner unless passed explicitly.
+ */
 export async function getXailensBalance(
   connection: Connection,
   walletPubkey: PublicKey,
-  mint: PublicKey = XAILENS_MINT,
-  tokenProgramId: PublicKey = XAILENS_TOKEN_PROGRAM_ID,
+  mint: PublicKey,
+  tokenProgramId?: PublicKey,
 ): Promise<number> {
+  tokenProgramId = tokenProgramId ? assertSupportedTokenProgram(tokenProgramId) : await getTokenProgramForMint(connection, mint);
   const ata = getAssociatedTokenAddressSync(mint, walletPubkey, false, tokenProgramId);
   try {
     const account = await getAccount(connection, ata, "confirmed", tokenProgramId);
@@ -61,12 +91,16 @@ export interface XailensMintInfo {
   uri: string | null;
 }
 
-/** Mint, authority and metadata summary. Used by scripts/verify-authorities.ts. */
+/**
+ * Mint, authority and metadata summary. The token program is read from the
+ * mint's owner unless passed explicitly.
+ */
 export async function getXailensMintInfo(
   connection: Connection,
-  mint: PublicKey = XAILENS_MINT,
-  tokenProgramId: PublicKey = XAILENS_TOKEN_PROGRAM_ID,
+  mint: PublicKey,
+  tokenProgramId?: PublicKey,
 ): Promise<XailensMintInfo> {
+  tokenProgramId = tokenProgramId ? assertSupportedTokenProgram(tokenProgramId) : await getTokenProgramForMint(connection, mint);
   const m = await getMint(connection, mint, "confirmed", tokenProgramId);
   const md = tokenProgramId.equals(TOKEN_2022_PROGRAM_ID)
     ? await getTokenMetadata(connection, mint, "confirmed", TOKEN_2022_PROGRAM_ID).catch(() => null)
@@ -88,14 +122,20 @@ export async function getXailensMintInfo(
 // Transfer
 // ---------------------------------------------------------------------------
 
-/** Token-2022 transfer_checked instruction for XAILENS. */
+/**
+ * `transfer_checked` instruction for XAILENS. Synchronous, so it cannot look
+ * up the mint: pass the token program from `getTokenProgramForMint`.
+ */
 export function createXailensTransferInstruction(
   from: PublicKey,
   to: PublicKey,
   owner: PublicKey,
   amount: bigint,
-  mint: PublicKey = XAILENS_MINT,
-  tokenProgramId: PublicKey = XAILENS_TOKEN_PROGRAM_ID,
+  mint: PublicKey,
+  tokenProgramId: PublicKey,
 ): TransactionInstruction {
+  if (!mint) throw new Error("mint is required");
+  if (!tokenProgramId) throw new Error("token program is required (use getTokenProgramForMint)");
+  assertSupportedTokenProgram(tokenProgramId);
   return createTransferCheckedInstruction(from, mint, to, owner, amount, XAILENS_DECIMALS, [], tokenProgramId);
 }

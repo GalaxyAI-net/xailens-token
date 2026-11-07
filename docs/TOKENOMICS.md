@@ -22,14 +22,14 @@ Supply cannot be increased, no holder can be frozen, and no transfer tax exists.
 
 ### 1.1 Token standard and migration to Token-2022
 
-Decision (2026-10-28): launch on legacy SPL. Raydium CPMM, Streamflow and every wallet support it without caveats, which removes an unknown from a one-week launch window. The `xailens-lock` program, the SDK and the scripts work with both token programs, so nothing changes in code when the migration happens.
+Decision (2026-10-28): launch on legacy SPL. Raydium CPMM, Streamflow and every wallet support it without caveats, which removes an unknown from a one-week launch window. The `xailens-lock` program, the SDK and the scripts work with both token programs and keep one pool per mint (pool PDA seeded by the mint), so the migration needs a new pool, not a code change. Creating that pool requires the program upgrade authority, so the program stays upgradeable (Squads 2-of-3) until the Token-2022 pool exists (docs/SECURITY.md section 1).
 
 Migration to Token-2022 is scheduled for months 7–9 (LITEPAPER section 5), executed as follows:
 
 1. Mint a new Token-2022 mint with the same 500,000,000 supply, same name and symbol, metadata locked, mint authority revoked at creation of the swap.
 2. Deploy an open-source, audited-by-review one-way swap program: it burns legacy tokens (or sends them to a dead address if burn is unavailable) and releases Token-2022 tokens 1:1 from an escrow that holds the entire new supply. No admin withdrawal path, no deadline on the swap.
 3. Re-create liquidity on the new mint, lock LP, publish both mint addresses and the swap address, and keep the legacy mint listed as "migrated" in README.md.
-4. Entitlements switch to the new mint after a published date; lock accounts on the old mint keep their clocks until the holder migrates (the lock program is initialised once per mint).
+4. Initialise the Token-2022 lock pool (`scripts/init-lock-pool.ts` with the new mint, signed by the Squads upgrade authority), then after its bake period set the lock program immutable. Entitlements switch to the new mint after a published date; lock accounts on the old mint keep their clocks until the holder migrates (request unlock, withdraw, swap, lock in the new pool), and clocks do not carry over between pools on-chain.
 
 No holder loses supply share in the migration, and the total supply stays 500,000,000 across both mints at all times.
 

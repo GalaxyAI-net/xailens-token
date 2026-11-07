@@ -51,6 +51,11 @@ export type XailensLock = {
                   111,
                   108
                 ]
+              },
+              {
+                "kind": "account",
+                "path": "pool.mint",
+                "account": "lockPool"
               }
             ]
           }
@@ -80,6 +85,35 @@ export type XailensLock = {
           "signer": true
         },
         {
+          "name": "pool",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  108,
+                  111,
+                  99,
+                  107,
+                  95,
+                  112,
+                  111,
+                  111,
+                  108
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "pool.mint",
+                "account": "lockPool"
+              }
+            ]
+          },
+          "relations": [
+            "lockAccount"
+          ]
+        },
+        {
           "name": "lockAccount",
           "writable": true,
           "pda": {
@@ -95,6 +129,10 @@ export type XailensLock = {
               },
               {
                 "kind": "account",
+                "path": "pool"
+              },
+              {
+                "kind": "account",
                 "path": "user"
               }
             ]
@@ -106,8 +144,10 @@ export type XailensLock = {
     {
       "name": "initialize",
       "docs": [
-        "Create the single lock pool. Callable once, only by the program's",
-        "upgrade authority, so nobody can front-run pool creation."
+        "Create the lock pool for `mint` (one pool per mint, so the Token-2022",
+        "migration mint gets its own pool and vault). Callable once per mint,",
+        "only by the program's upgrade authority, so nobody can front-run pool",
+        "creation."
       ],
       "discriminator": [
         175,
@@ -126,7 +166,11 @@ export type XailensLock = {
           "signer": true
         },
         {
-          "name": "mint"
+          "name": "mint",
+          "docs": [
+            "Must have 6 decimals and no freeze authority: a freeze authority could",
+            "freeze the vault and block withdrawals."
+          ]
         },
         {
           "name": "pool",
@@ -146,6 +190,10 @@ export type XailensLock = {
                   111,
                   108
                 ]
+              },
+              {
+                "kind": "account",
+                "path": "mint"
               }
             ]
           }
@@ -244,6 +292,10 @@ export type XailensLock = {
                   111,
                   108
                 ]
+              },
+              {
+                "kind": "account",
+                "path": "mint"
               }
             ]
           }
@@ -264,6 +316,10 @@ export type XailensLock = {
                   99,
                   107
                 ]
+              },
+              {
+                "kind": "account",
+                "path": "pool"
               },
               {
                 "kind": "account",
@@ -336,6 +392,11 @@ export type XailensLock = {
                   111,
                   108
                 ]
+              },
+              {
+                "kind": "account",
+                "path": "pool.mint",
+                "account": "lockPool"
               }
             ]
           }
@@ -387,9 +448,17 @@ export type XailensLock = {
                   111,
                   108
                 ]
+              },
+              {
+                "kind": "account",
+                "path": "pool.mint",
+                "account": "lockPool"
               }
             ]
-          }
+          },
+          "relations": [
+            "lockAccount"
+          ]
         },
         {
           "name": "lockAccount",
@@ -404,6 +473,10 @@ export type XailensLock = {
                   99,
                   107
                 ]
+              },
+              {
+                "kind": "account",
+                "path": "pool"
               },
               {
                 "kind": "account",
@@ -456,6 +529,11 @@ export type XailensLock = {
                   111,
                   108
                 ]
+              },
+              {
+                "kind": "account",
+                "path": "pool.mint",
+                "account": "lockPool"
               }
             ]
           }
@@ -512,9 +590,16 @@ export type XailensLock = {
                   111,
                   108
                 ]
+              },
+              {
+                "kind": "account",
+                "path": "mint"
               }
             ]
-          }
+          },
+          "relations": [
+            "lockAccount"
+          ]
         },
         {
           "name": "mint"
@@ -532,6 +617,10 @@ export type XailensLock = {
                   99,
                   107
                 ]
+              },
+              {
+                "kind": "account",
+                "path": "pool"
               },
               {
                 "kind": "account",
@@ -736,6 +825,16 @@ export type XailensLock = {
       "code": 6011,
       "name": "poolPaused",
       "msg": "The pool is paused: no new locks (withdrawals still work)"
+    },
+    {
+      "code": 6012,
+      "name": "invalidMint",
+      "msg": "Mint must have 6 decimals and no freeze authority"
+    },
+    {
+      "code": 6013,
+      "name": "unsupportedMintExtension",
+      "msg": "Mint has a Token-2022 extension the lock pool does not support"
     }
   ],
   "types": [
@@ -778,6 +877,13 @@ export type XailensLock = {
         "fields": [
           {
             "name": "owner",
+            "type": "pubkey"
+          },
+          {
+            "name": "pool",
+            "docs": [
+              "Pool this position belongs to (one pool per mint)."
+            ],
             "type": "pubkey"
           },
           {

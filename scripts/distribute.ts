@@ -16,6 +16,7 @@
  *
  * Environment variables:
  *   SOLANA_RPC_URL          - RPC endpoint (default: devnet)
+ *   SOLANA_CLUSTER          - mainnet-beta | devnet | localnet; required when the RPC URL does not reveal the cluster
  *   DEPLOYER_KEYPAIR_PATH   - Path to deployer keypair JSON
  *   XAILENS_MINT            - Mint address of the XAILENS token
  *
@@ -41,6 +42,7 @@ import {
 import * as fs from "fs";
 import * as path from "path";
 import * as os from "os";
+import { needsConfirmation, resolveCluster } from "./lib/preflight";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -121,11 +123,7 @@ async function main(): Promise<void> {
   // ---- Connection --------------------------------------------------------
   const rpcUrl = process.env.SOLANA_RPC_URL || clusterApiUrl("devnet");
   const connection = new Connection(rpcUrl, "confirmed");
-  const cluster = rpcUrl.includes("devnet")
-    ? "devnet"
-    : rpcUrl.includes("mainnet")
-    ? "mainnet-beta"
-    : rpcUrl;
+  const cluster = resolveCluster(rpcUrl); // SOLANA_CLUSTER overrides URL detection
 
   console.log("=".repeat(64));
   console.log(
@@ -134,11 +132,11 @@ async function main(): Promise<void> {
       : "XAILENS Token Distribution"
   );
   console.log("=".repeat(64));
-  if (rpcUrl.includes('mainnet')) {
+  if (needsConfirmation(cluster)) {
     const readline = await import('readline');
     const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
     const answer = await new Promise<string>(resolve => {
-      rl.question('\n\u26a0\ufe0f  You are targeting MAINNET. Type "yes" to continue: ', resolve);
+      rl.question(`\n\u26a0\ufe0f  You are targeting ${cluster === "custom" ? "an unrecognised RPC (treated as MAINNET; set SOLANA_CLUSTER to declare it)" : "MAINNET"}. Type "yes" to continue: `, resolve);
     });
     rl.close();
     if (answer.trim().toLowerCase() !== 'yes') {

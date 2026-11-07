@@ -6,7 +6,7 @@ On-chain Solana program (Anchor 0.31) that lets XAILENS holders lock tokens in a
 
 | Instruction | Who | What |
 | --- | --- | --- |
-| `initialize(params)` | program upgrade authority only | Creates the single pool PDA and vault. Cannot be front-run. |
+| `initialize(params)` | program upgrade authority only | Creates the pool PDA (`["lock_pool", mint]`, one per mint) and its vault. Cannot be front-run. Lock positions are `["lock", pool, owner]`. |
 | `lock(amount)` | holder | Transfers tokens into the vault, starts threshold clocks when a threshold is first met. Blocked while paused or while an unlock is pending. |
 | `request_unlock()` | holder | Starts the cooldown (snapshotted from the pool) and clears all threshold clocks. |
 | `withdraw()` | holder | Returns the full amount after the cooldown. **Never blocked by pause.** |

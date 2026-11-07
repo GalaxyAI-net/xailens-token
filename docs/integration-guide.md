@@ -26,7 +26,10 @@ import { Connection, PublicKey } from "@solana/web3.js";
 import { LockClient } from "@xailens/solana-sdk";
 
 const connection = new Connection(process.env.SOLANA_RPC_URL!, "confirmed");
-const client = new LockClient(connection, undefined, new PublicKey(process.env.LOCK_PROGRAM_ID!));
+const client = new LockClient(connection, {
+  mint: new PublicKey(process.env.XAILENS_MINT!), // one pool per mint
+  programId: new PublicKey(process.env.LOCK_PROGRAM_ID!),
+});
 
 export async function entitlementsAt(wallet: PublicKey, billingUnixSeconds: number) {
   return client.getEligibility(wallet, billingUnixSeconds);
@@ -44,7 +47,7 @@ If a holder benefit in XGold is enabled (TOKENOMICS D5), compute it from the sam
 
 ## 6. Accepting XAILENS as payment
 
-1. Server builds a `transfer_checked` instruction from the payer's ATA to the treasury ATA for the exact raw amount (`createXailensTransferInstruction`), with a recent blockhash and a memo containing the invoice id.
+1. Server builds a `transfer_checked` instruction from the payer's ATA to the treasury ATA for the exact raw amount (`createXailensTransferInstruction`, with the token program from `getTokenProgramForMint`, never from configuration), with a recent blockhash and a memo containing the invoice id.
 2. Client signs and sends; returns the signature.
 3. Server fetches the transaction with `getParsedTransaction(sig, { commitment: "confirmed" })`, checks: success, destination is the treasury ATA, mint matches, amount matches, memo matches, and the signature has not been used before. Only then marks the invoice paid.
 

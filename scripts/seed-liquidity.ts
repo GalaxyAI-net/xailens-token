@@ -38,6 +38,7 @@
  *
  * Environment variables:
  *   SOLANA_RPC_URL          - RPC endpoint (default: devnet)
+ *   SOLANA_CLUSTER          - mainnet-beta | devnet | localnet; required when the RPC URL does not reveal the cluster
  *   DEPLOYER_KEYPAIR_PATH   - Path to deployer keypair JSON
  *   XAILENS_MINT            - XAILENS token mint address
  *   RAYDIUM_PROGRAM_ID      - Raydium AMM program (optional, for on-chain tx)
@@ -65,6 +66,7 @@ import {
 import * as fs from "fs";
 import * as path from "path";
 import * as os from "os";
+import { requireKnownCluster, resolveCluster } from "./lib/preflight";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -184,11 +186,8 @@ async function main(): Promise<void> {
   // ---- Connection --------------------------------------------------------
   const rpcUrl = process.env.SOLANA_RPC_URL || clusterApiUrl("devnet");
   const connection = new Connection(rpcUrl, "confirmed");
-  const cluster = rpcUrl.includes("devnet")
-    ? "devnet"
-    : rpcUrl.includes("mainnet")
-    ? "mainnet-beta"
-    : rpcUrl;
+  // The USDC mint differs per cluster, so an unrecognised RPC must be declared via SOLANA_CLUSTER.
+  const cluster = requireKnownCluster(resolveCluster(rpcUrl));
 
   const isMainnet = cluster === "mainnet-beta";
   const usdcMint = isMainnet ? USDC_MINT_MAINNET : USDC_MINT_DEVNET;

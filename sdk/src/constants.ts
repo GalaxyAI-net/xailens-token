@@ -1,5 +1,7 @@
 import { PublicKey } from "@solana/web3.js";
 
+import lockIdl from "./idl/xailens_lock.json";
+
 // ---------------------------------------------------------------------------
 // Token basics
 // ---------------------------------------------------------------------------
@@ -16,16 +18,8 @@ export const TOKEN_2022_PROGRAM_ID = new PublicKey("TokenzQdBNbLqP5VEhdkAS6EPFLC
 /** Legacy SPL Token program ID (fallback launch standard, see TOKENOMICS D7). */
 export const LEGACY_TOKEN_PROGRAM_ID = new PublicKey("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA");
 
-/**
- * Token program the XAILENS mint lives under. Launch (decided 2026-10-28) is
- * on the legacy SPL program; migration to Token-2022 is scheduled for months
- * 7–9 after TGE. Set `XAILENS_TOKEN_PROGRAM=token2022` in the environment
- * once the migrated mint is live.
- */
-export const XAILENS_TOKEN_PROGRAM_ID =
-  typeof process !== "undefined" && process.env?.XAILENS_TOKEN_PROGRAM === "token2022"
-    ? TOKEN_2022_PROGRAM_ID
-    : LEGACY_TOKEN_PROGRAM_ID;
+// The token program is never configured: read it from the mint's owner with
+// `getTokenProgramForMint` (launch: legacy SPL; Token-2022 migration months 7–9).
 
 /**
  * XAILENS mint address.
@@ -36,12 +30,11 @@ export const XAILENS_TOKEN_PROGRAM_ID =
 export const XAILENS_MINT = new PublicKey("11111111111111111111111111111111");
 
 /**
- * xailens-lock program ID.
- *
- * PLACEHOLDER until deployment. Keep in sync with Anchor.toml after
- * `anchor keys sync`.
+ * xailens-lock program ID, read from the bundled IDL so it always matches
+ * `declare_id!` (copy `target/idl/xailens_lock.json` into `sdk/src/idl/`
+ * after `anchor keys sync` + `anchor build`).
  */
-export const LOCK_PROGRAM_ID = new PublicKey("Fg6PaFpoGXkYsidMpWTK6W2BeZ7FEfcYkg476zPFsLnS");
+export const LOCK_PROGRAM_ID = new PublicKey(lockIdl.address);
 
 /** Deployer wallet (initial mint authority, revoked after TGE). */
 export const OWNER_WALLET = new PublicKey("3qqAyWYZ3vGNA2nHw25Yp1bR3eiGRRmfjLgT3S7eWdne");

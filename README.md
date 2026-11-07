@@ -124,7 +124,7 @@ const connection = new Connection(process.env.SOLANA_RPC_URL!, "confirmed");
 const wallet = new PublicKey("...");
 
 const balance = await getXailensBalance(connection, wallet, mint);
-const client = new LockClient(connection, undefined, programId);
+const client = new LockClient(connection, { mint, programId }); // one pool per mint
 const { discount, founder, votes } = await client.getEligibility(wallet); // server-side only
 ```
 

@@ -14,6 +14,7 @@
  *
  * Environment variables:
  *   SOLANA_RPC_URL          - RPC endpoint (default: devnet)
+ *   SOLANA_CLUSTER          - mainnet-beta | devnet | localnet; required when the RPC URL does not reveal the cluster
  *   DEPLOYER_KEYPAIR_PATH   - Path to deployer keypair JSON
  *   TOKEN_URI               - Off-chain metadata JSON URL (default below)
  *
@@ -49,6 +50,7 @@ import {
 import * as fs from "fs";
 import * as path from "path";
 import * as os from "os";
+import { needsConfirmation, resolveCluster } from "./lib/preflight";
 import * as readline from "readline";
 
 const DECIMALS = 6;
@@ -88,13 +90,13 @@ export function metadataPda(mint: PublicKey): PublicKey {
 async function main(): Promise<void> {
   const rpcUrl = process.env.SOLANA_RPC_URL || clusterApiUrl("devnet");
   const connection = new Connection(rpcUrl, "confirmed");
-  const cluster = rpcUrl.includes("mainnet") ? "mainnet-beta" : rpcUrl.includes("devnet") ? "devnet" : "custom";
+  const cluster = resolveCluster(rpcUrl); // SOLANA_CLUSTER overrides URL detection
 
   console.log("XAILENS legacy SPL mint (fallback path)");
   console.log(`RPC     : ${sanitizeRpcUrl(rpcUrl)}`);
   console.log(`Cluster : ${cluster}`);
-  if (cluster === "mainnet-beta") {
-    const a = await prompt('You are targeting MAINNET. Type "yes" to continue: ');
+  if (needsConfirmation(cluster)) {
+    const a = await prompt(`You are targeting ${cluster === "custom" ? "an unrecognised RPC (treated as MAINNET)" : "MAINNET"}. Type "yes" to continue: `);
     if (a.toLowerCase() !== "yes") { console.log("Aborted."); return; }
   }
 

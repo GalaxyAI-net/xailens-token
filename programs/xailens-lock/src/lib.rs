@@ -10,9 +10,15 @@
 //! - Withdrawals can never be blocked by the admin (pause only stops new locks).
 //! - The admin cannot change the cooldown of an unlock request that is already pending.
 //! - Admin authority moves only through a two-step propose/accept transfer.
-//! - Only the program upgrade authority can initialize the pool.
+//! - Only the program upgrade authority can initialize a pool.
+//! - One pool per mint (PDA seeded by the mint); lock positions are seeded by
+//!   pool and owner, so positions in different pools never collide.
 
 use anchor_lang::prelude::*;
+use anchor_spl::token_2022::spl_token_2022::{
+    self,
+    extension::{BaseStateWithExtensions, ExtensionType, StateWithExtensions},
+};
 use anchor_spl::token_interface::{
     transfer_checked, Mint, TokenAccount, TokenInterface, TransferChecked,
 };
@@ -39,10 +45,13 @@ pub const LOCK_SEED: &[u8] = b"lock";
 pub mod xailens_lock {
     use super::*;
 
-    /// Create the single lock pool. Callable once, only by the program's
-    /// upgrade authority, so nobody can front-run pool creation.
+    /// Create the lock pool for `mint` (one pool per mint, so the Token-2022
+    /// migration mint gets its own pool and vault). Callable once per mint,
+    /// only by the program's upgrade authority, so nobody can front-run pool
+    /// creation.
     pub fn initialize(ctx: Context<Initialize>, params: PoolParams) -> Result<()> {
         validate_params(&params)?;
+        validate_mint_extensions(&ctx.accounts.mint.to_account_info())?;
 
         let pool = &mut ctx.accounts.pool;
         pool.authority = ctx.accounts.authority.key();
@@ -97,6 +106,7 @@ pub mod xailens_lock {
         let now = Clock::get()?.unix_timestamp;
         if lock_account.amount == 0 {
             lock_account.owner = ctx.accounts.user.key();
+            lock_account.pool = ctx.accounts.pool.key();
             lock_account.locked_since = now;
             lock_account.bump = ctx.bumps.lock_account;
         }
@@ -158,6 +168,7 @@ pub mod xailens_lock {
     pub fn withdraw(ctx: Context<Withdraw>) -> Result<()> {
         let now = Clock::get()?.unix_timestamp;
         let pool_bump = ctx.accounts.pool.bump;
+        let pool_mint = ctx.accounts.pool.mint;
 
         let lock_account = &mut ctx.accounts.lock_account;
         require!(lock_account.amount > 0, LockError::NothingLocked);
@@ -183,7 +194,7 @@ pub mod xailens_lock {
         lock_account.founder_since = 0;
         lock_account.voting_since = 0;
 
-        let seeds: &[&[u8]] = &[POOL_SEED, &[pool_bump]];
+        let seeds: &[&[u8]] = &[POOL_SEED, pool_mint.as_ref(), &[pool_bump]];
         transfer_checked(
             CpiContext::new_with_signer(
                 ctx.accounts.token_program.to_account_info(),
@@ -297,6 +308,39 @@ fn validate_params(p: &PoolParams) -> Result<()> {
     Ok(())
 }
 
+/// Token-2022 mint extensions that cannot change how much the vault receives,
+/// who can move vault tokens, or whether withdrawals go through.
+const ALLOWED_MINT_EXTENSIONS: &[ExtensionType] = &[
+    ExtensionType::MetadataPointer,
+    ExtensionType::TokenMetadata,
+    ExtensionType::GroupPointer,
+    ExtensionType::GroupMemberPointer,
+    ExtensionType::TokenGroup,
+    ExtensionType::TokenGroupMember,
+    ExtensionType::MintCloseAuthority,
+];
+
+/// Reject Token-2022 mints with any extension outside the allow-list
+/// (transfer fee, transfer hook, permanent delegate, default frozen state,
+/// non-transferable, confidential transfer, ...). Legacy SPL mints have no
+/// extensions. Unknown extension types fail to parse and are rejected too.
+fn validate_mint_extensions(mint: &AccountInfo) -> Result<()> {
+    if *mint.owner != spl_token_2022::ID {
+        return Ok(());
+    }
+    let data = mint.try_borrow_data()?;
+    let state = StateWithExtensions::<spl_token_2022::state::Mint>::unpack(&data)
+        .map_err(|_| error!(LockError::UnsupportedMintExtension))?;
+    let types = state
+        .get_extension_types()
+        .map_err(|_| error!(LockError::UnsupportedMintExtension))?;
+    require!(
+        types.iter().all(|t| ALLOWED_MINT_EXTENSIONS.contains(t)),
+        LockError::UnsupportedMintExtension
+    );
+    Ok(())
+}
+
 /// Start a threshold clock the first time the locked amount reaches the
 /// threshold. Clocks are never reset here: the locked amount only grows until
 /// `request_unlock`, which clears every clock.
@@ -360,6 +404,8 @@ pub struct LockPool {
 #[derive(InitSpace)]
 pub struct LockAccount {
     pub owner: Pubkey,
+    /// Pool this position belongs to (one pool per mint).
+    pub pool: Pubkey,
     /// Raw locked amount.
     pub amount: u64,
     /// When the current lock started (first deposit after an empty state).
@@ -388,13 +434,19 @@ pub struct Initialize<'info> {
     #[account(mut)]
     pub authority: Signer<'info>,
 
+    /// Must have 6 decimals and no freeze authority: a freeze authority could
+    /// freeze the vault and block withdrawals.
+    #[account(
+        constraint = mint.decimals == XAILENS_DECIMALS @ LockError::InvalidMint,
+        constraint = mint.freeze_authority.is_none() @ LockError::InvalidMint,
+    )]
     pub mint: InterfaceAccount<'info, Mint>,
 
     #[account(
         init,
         payer = authority,
         space = 8 + LockPool::INIT_SPACE,
-        seeds = [POOL_SEED],
+        seeds = [POOL_SEED, mint.key().as_ref()],
         bump,
     )]
     pub pool: Account<'info, LockPool>,
@@ -427,7 +479,7 @@ pub struct Lock<'info> {
     #[account(mut)]
     pub user: Signer<'info>,
 
-    #[account(mut, seeds = [POOL_SEED], bump = pool.bump)]
+    #[account(mut, seeds = [POOL_SEED, mint.key().as_ref()], bump = pool.bump)]
     pub pool: Account<'info, LockPool>,
 
     #[account(address = pool.mint)]
@@ -437,7 +489,7 @@ pub struct Lock<'info> {
         init_if_needed,
         payer = user,
         space = 8 + LockAccount::INIT_SPACE,
-        seeds = [LOCK_SEED, user.key().as_ref()],
+        seeds = [LOCK_SEED, pool.key().as_ref(), user.key().as_ref()],
         bump,
     )]
     pub lock_account: Account<'info, LockAccount>,
@@ -461,13 +513,14 @@ pub struct Lock<'info> {
 pub struct RequestUnlock<'info> {
     pub user: Signer<'info>,
 
-    #[account(seeds = [POOL_SEED], bump = pool.bump)]
+    #[account(seeds = [POOL_SEED, pool.mint.as_ref()], bump = pool.bump)]
     pub pool: Account<'info, LockPool>,
 
     #[account(
         mut,
-        seeds = [LOCK_SEED, user.key().as_ref()],
+        seeds = [LOCK_SEED, pool.key().as_ref(), user.key().as_ref()],
         bump = lock_account.bump,
+        has_one = pool @ LockError::Unauthorized,
         constraint = lock_account.owner == user.key() @ LockError::Unauthorized,
     )]
     pub lock_account: Account<'info, LockAccount>,
@@ -478,7 +531,7 @@ pub struct Withdraw<'info> {
     #[account(mut)]
     pub user: Signer<'info>,
 
-    #[account(mut, seeds = [POOL_SEED], bump = pool.bump)]
+    #[account(mut, seeds = [POOL_SEED, mint.key().as_ref()], bump = pool.bump)]
     pub pool: Account<'info, LockPool>,
 
     #[account(address = pool.mint)]
@@ -486,8 +539,9 @@ pub struct Withdraw<'info> {
 
     #[account(
         mut,
-        seeds = [LOCK_SEED, user.key().as_ref()],
+        seeds = [LOCK_SEED, pool.key().as_ref(), user.key().as_ref()],
         bump = lock_account.bump,
+        has_one = pool @ LockError::Unauthorized,
         constraint = lock_account.owner == user.key() @ LockError::Unauthorized,
     )]
     pub lock_account: Account<'info, LockAccount>,
@@ -511,11 +565,15 @@ pub struct CloseLockAccount<'info> {
     #[account(mut)]
     pub user: Signer<'info>,
 
+    #[account(seeds = [POOL_SEED, pool.mint.as_ref()], bump = pool.bump)]
+    pub pool: Account<'info, LockPool>,
+
     #[account(
         mut,
         close = user,
-        seeds = [LOCK_SEED, user.key().as_ref()],
+        seeds = [LOCK_SEED, pool.key().as_ref(), user.key().as_ref()],
         bump = lock_account.bump,
+        has_one = pool @ LockError::Unauthorized,
         constraint = lock_account.owner == user.key() @ LockError::Unauthorized,
     )]
     pub lock_account: Account<'info, LockAccount>,
@@ -527,7 +585,7 @@ pub struct AdminOnly<'info> {
 
     #[account(
         mut,
-        seeds = [POOL_SEED],
+        seeds = [POOL_SEED, pool.mint.as_ref()],
         bump = pool.bump,
         has_one = authority @ LockError::Unauthorized,
     )]
@@ -540,7 +598,7 @@ pub struct AcceptAuthority<'info> {
 
     #[account(
         mut,
-        seeds = [POOL_SEED],
+        seeds = [POOL_SEED, pool.mint.as_ref()],
         bump = pool.bump,
         constraint = pool.pending_authority == new_authority.key() @ LockError::Unauthorized,
     )]
@@ -638,4 +696,8 @@ pub enum LockError {
     InvalidAuthority,
     #[msg("The pool is paused: no new locks (withdrawals still work)")]
     PoolPaused,
+    #[msg("Mint must have 6 decimals and no freeze authority")]
+    InvalidMint,
+    #[msg("Mint has a Token-2022 extension the lock pool does not support")]
+    UnsupportedMintExtension,
 }

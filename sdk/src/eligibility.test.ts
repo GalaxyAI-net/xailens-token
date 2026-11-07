@@ -27,6 +27,7 @@ const pool: LockPoolInfo = {
 function acc(over: Partial<LockAccountInfo>): LockAccountInfo {
   return {
     owner: PublicKey.default,
+    pool: PublicKey.default,
     amount: 0n,
     lockedSince: 0,
     lastDepositAt: 0,
@@ -41,23 +42,23 @@ function acc(over: Partial<LockAccountInfo>): LockAccountInfo {
 
 test("discount needs 25 full days", () => {
   const a = acc({ amount: raw(1_000), discountSince: T0 });
-  assert.equal(isDiscountEligible(a, T0 + 24 * DAY), false);
-  assert.equal(isDiscountEligible(a, T0 + DISCOUNT_HOLD_SECONDS - 1), false);
-  assert.equal(isDiscountEligible(a, T0 + DISCOUNT_HOLD_SECONDS), true);
-  assert.equal(isDiscountEligible(a, T0 + 40 * DAY), true);
+  assert.equal(isDiscountEligible(a, pool, T0 + 24 * DAY), false);
+  assert.equal(isDiscountEligible(a, pool, T0 + DISCOUNT_HOLD_SECONDS - 1), false);
+  assert.equal(isDiscountEligible(a, pool, T0 + DISCOUNT_HOLD_SECONDS), true);
+  assert.equal(isDiscountEligible(a, pool, T0 + 40 * DAY), true);
 });
 
 test("no discount when the clock never started or an unlock is pending", () => {
-  assert.equal(isDiscountEligible(acc({ amount: raw(999) }), T0 + 100 * DAY), false);
+  assert.equal(isDiscountEligible(acc({ amount: raw(999) }), pool, T0 + 100 * DAY), false);
   const pending = acc({ amount: raw(1_000), discountSince: T0, unlockRequestedAt: T0 + 30 * DAY });
-  assert.equal(isDiscountEligible(pending, T0 + 40 * DAY), false);
+  assert.equal(isDiscountEligible(pending, pool, T0 + 40 * DAY), false);
 });
 
 test("founder clock is independent from the discount clock", () => {
   const a = acc({ amount: raw(50_000), discountSince: T0, founderSince: T0 + 10 * DAY });
-  assert.equal(isDiscountEligible(a, T0 + 26 * DAY), true);
-  assert.equal(isFounderEligible(a, T0 + 26 * DAY), false);
-  assert.equal(isFounderEligible(a, T0 + 35 * DAY), true);
+  assert.equal(isDiscountEligible(a, pool, T0 + 26 * DAY), true);
+  assert.equal(isFounderEligible(a, pool, T0 + 26 * DAY), false);
+  assert.equal(isFounderEligible(a, pool, T0 + 35 * DAY), true);
 });
 
 test("votes need 6 months and scale with amount, capped at 10", () => {
@@ -94,4 +95,23 @@ test("discount percent and XGold grant follow the eligibility levels", () => {
   assert.equal(xgoldGrant({ discount: false, founder: false, votes: 0 }), 0);
   assert.equal(xgoldGrant({ discount: true, founder: false, votes: 0 }), 10);
   assert.equal(xgoldGrant({ discount: true, founder: true, votes: 3 }), 100);
+});
+
+test("F4: a stale clock does not count once the amount is below the current pool threshold", () => {
+  // Clock started when the threshold was 1,000; the admin later raised it to 20,000.
+  const raised: LockPoolInfo = { ...pool, discountThreshold: raw(20_000), founderThreshold: raw(100_000) };
+  const a = acc({ amount: raw(10_000), discountSince: T0, founderSince: T0 });
+  const e = getEligibility(a, raised, T0 + 30 * DAY);
+  assert.equal(e.discount, false);
+  assert.equal(e.founder, false);
+  // Same wallet under the original thresholds still qualifies for the discount.
+  assert.equal(getEligibility(a, pool, T0 + 30 * DAY).discount, true);
+});
+
+test("F4: a disabled threshold (0) grants nothing even with a running clock", () => {
+  const disabled: LockPoolInfo = { ...pool, discountThreshold: 0n, founderThreshold: 0n };
+  const a = acc({ amount: raw(200_000), discountSince: T0, founderSince: T0 });
+  const e = getEligibility(a, disabled, T0 + 30 * DAY);
+  assert.equal(e.discount, false);
+  assert.equal(e.founder, false);
 });

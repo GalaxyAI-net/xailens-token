@@ -25,6 +25,10 @@ import {
   getAssociatedTokenAddressSync,
   getAccount,
   getMintLen,
+  ExtensionType,
+  createInitializeTransferFeeConfigInstruction,
+  createInitializePermanentDelegateInstruction,
+  createInitializeMetadataPointerInstruction,
 } from "@solana/spl-token";
 import { expect } from "chai";
 import type { XailensLock } from "../target/types/xailens_lock";
@@ -72,10 +76,10 @@ describe(`xailens-lock (${TOKEN_PROGRAM.equals(TOKEN_PROGRAM_ID) ? "legacy SPL" 
   const stranger = Keypair.generate();
   const newAuthority = Keypair.generate();
 
-  const [poolPda] = PublicKey.findProgramAddressSync([Buffer.from("lock_pool")], program.programId);
+  const [poolPda] = PublicKey.findProgramAddressSync([Buffer.from("lock_pool"), mint.toBuffer()], program.programId);
   const [vaultPda] = PublicKey.findProgramAddressSync([Buffer.from("vault"), poolPda.toBuffer()], program.programId);
   const lockPda = (owner: PublicKey) =>
-    PublicKey.findProgramAddressSync([Buffer.from("lock"), owner.toBuffer()], program.programId)[0];
+    PublicKey.findProgramAddressSync([Buffer.from("lock"), poolPda.toBuffer(), owner.toBuffer()], program.programId)[0];
   const ata = (owner: PublicKey) =>
     getAssociatedTokenAddressSync(mint, owner, false, TOKEN_PROGRAM, ASSOCIATED_TOKEN_PROGRAM_ID);
   const [programData] = PublicKey.findProgramAddressSync(
@@ -275,7 +279,7 @@ describe(`xailens-lock (${TOKEN_PROGRAM.equals(TOKEN_PROGRAM_ID) ? "legacy SPL" 
     await expectAnchorError(
       program.methods
         .updatePool({ cooldownPeriod: null, discountThreshold: null, founderThreshold: null, votingThreshold: null, paused: true })
-        .accounts({ authority: stranger.publicKey })
+        .accountsPartial({ authority: stranger.publicKey, pool: poolPda })
         .signers([stranger])
         .rpc(),
       "Unauthorized",
@@ -286,7 +290,7 @@ describe(`xailens-lock (${TOKEN_PROGRAM.equals(TOKEN_PROGRAM_ID) ? "legacy SPL" 
     await expectAnchorError(
       program.methods
         .updatePool({ cooldownPeriod: new BN(MAX_COOLDOWN_PLUS_ONE()), discountThreshold: null, founderThreshold: null, votingThreshold: null, paused: null })
-        .accounts({ authority: payer.publicKey })
+        .accountsPartial({ authority: payer.publicKey, pool: poolPda })
         .rpc(),
       "InvalidCooldown",
     );
@@ -296,7 +300,7 @@ describe(`xailens-lock (${TOKEN_PROGRAM.equals(TOKEN_PROGRAM_ID) ? "legacy SPL" 
     await expectAnchorError(
       program.methods
         .updatePool({ cooldownPeriod: null, discountThreshold: raw(FOUNDER + 1), founderThreshold: null, votingThreshold: null, paused: null })
-        .accounts({ authority: payer.publicKey })
+        .accountsPartial({ authority: payer.publicKey, pool: poolPda })
         .rpc(),
       "InvalidThresholds",
     );
@@ -307,14 +311,14 @@ describe(`xailens-lock (${TOKEN_PROGRAM.equals(TOKEN_PROGRAM_ID) ? "legacy SPL" 
   it("pause blocks new locks", async () => {
     await program.methods
       .updatePool({ cooldownPeriod: null, discountThreshold: null, founderThreshold: null, votingThreshold: null, paused: true })
-      .accounts({ authority: payer.publicKey })
+      .accountsPartial({ authority: payer.publicKey, pool: poolPda })
       .rpc();
     await expectAnchorError(lockIx(stranger, raw(1_000)), "PoolPaused");
   });
 
   it("pause does NOT block request_unlock or withdraw", async () => {
     // user2 requests unlock while paused
-    await program.methods.requestUnlock().accounts({ user: user2.publicKey }).signers([user2]).rpc();
+    await program.methods.requestUnlock().accountsPartial({ user: user2.publicKey, pool: poolPda }).signers([user2]).rpc();
     const acc = await program.account.lockAccount.fetch(lockPda(user2.publicKey));
     expect(acc.unlockRequestedAt.toNumber()).to.be.greaterThan(0);
     expect(acc.unlockCooldown.toNumber()).to.equal(COOLDOWN);
@@ -324,7 +328,7 @@ describe(`xailens-lock (${TOKEN_PROGRAM.equals(TOKEN_PROGRAM_ID) ? "legacy SPL" 
     // admin tries to extend the cooldown after the request: must not affect user2
     await program.methods
       .updatePool({ cooldownPeriod: new BN(20 * DAY), discountThreshold: null, founderThreshold: null, votingThreshold: null, paused: null })
-      .accounts({ authority: payer.publicKey })
+      .accountsPartial({ authority: payer.publicKey, pool: poolPda })
       .rpc();
 
     await sleep((COOLDOWN + 1) * 1000);
@@ -340,13 +344,13 @@ describe(`xailens-lock (${TOKEN_PROGRAM.equals(TOKEN_PROGRAM_ID) ? "legacy SPL" 
     // restore
     await program.methods
       .updatePool({ cooldownPeriod: new BN(COOLDOWN), discountThreshold: null, founderThreshold: null, votingThreshold: null, paused: false })
-      .accounts({ authority: payer.publicKey })
+      .accountsPartial({ authority: payer.publicKey, pool: poolPda })
       .rpc();
   });
 
   it("closes an empty lock account and returns rent", async () => {
     const lamportsBefore = await connection.getBalance(user2.publicKey);
-    await program.methods.closeLockAccount().accounts({ user: user2.publicKey }).signers([user2]).rpc();
+    await program.methods.closeLockAccount().accountsPartial({ user: user2.publicKey, pool: poolPda }).signers([user2]).rpc();
     const info = await connection.getAccountInfo(lockPda(user2.publicKey));
     expect(info).to.be.null;
     expect(await connection.getBalance(user2.publicKey)).to.be.greaterThan(lamportsBefore);
@@ -354,7 +358,7 @@ describe(`xailens-lock (${TOKEN_PROGRAM.equals(TOKEN_PROGRAM_ID) ? "legacy SPL" 
 
   it("refuses to close a lock account that still holds tokens", async () => {
     await expectAnchorError(
-      program.methods.closeLockAccount().accounts({ user: user.publicKey }).signers([user]).rpc(),
+      program.methods.closeLockAccount().accountsPartial({ user: user.publicKey, pool: poolPda }).signers([user]).rpc(),
       "StillLocked",
     );
   });
@@ -366,10 +370,10 @@ describe(`xailens-lock (${TOKEN_PROGRAM.equals(TOKEN_PROGRAM_ID) ? "legacy SPL" 
   });
 
   it("cannot lock more while an unlock is pending, and cannot request twice", async () => {
-    await program.methods.requestUnlock().accounts({ user: user.publicKey }).signers([user]).rpc();
+    await program.methods.requestUnlock().accountsPartial({ user: user.publicKey, pool: poolPda }).signers([user]).rpc();
     await expectAnchorError(lockIx(user, raw(1_000)), "UnlockAlreadyRequested");
     await expectAnchorError(
-      program.methods.requestUnlock().accounts({ user: user.publicKey }).signers([user]).rpc(),
+      program.methods.requestUnlock().accountsPartial({ user: user.publicKey, pool: poolPda }).signers([user]).rpc(),
       "UnlockAlreadyRequested",
     );
   });
@@ -393,7 +397,7 @@ describe(`xailens-lock (${TOKEN_PROGRAM.equals(TOKEN_PROGRAM_ID) ? "legacy SPL" 
     try {
       await program.methods
         .requestUnlock()
-        .accountsPartial({ user: stranger.publicKey, lockAccount: lockPda(user.publicKey) })
+        .accountsPartial({ user: stranger.publicKey, pool: poolPda, lockAccount: lockPda(user.publicKey) })
         .signers([stranger])
         .rpc();
     } catch {
@@ -406,19 +410,19 @@ describe(`xailens-lock (${TOKEN_PROGRAM.equals(TOKEN_PROGRAM_ID) ? "legacy SPL" 
 
   it("transfers authority in two steps and the old key loses access", async () => {
     await expectAnchorError(
-      program.methods.acceptAuthority().accounts({ newAuthority: newAuthority.publicKey }).signers([newAuthority]).rpc(),
+      program.methods.acceptAuthority().accountsPartial({ newAuthority: newAuthority.publicKey, pool: poolPda }).signers([newAuthority]).rpc(),
       "Unauthorized",
     );
-    await program.methods.proposeAuthority(newAuthority.publicKey).accounts({ authority: payer.publicKey }).rpc();
+    await program.methods.proposeAuthority(newAuthority.publicKey).accountsPartial({ authority: payer.publicKey, pool: poolPda }).rpc();
     let pool = await program.account.lockPool.fetch(poolPda);
     expect(pool.pendingAuthority.equals(newAuthority.publicKey)).to.be.true;
     expect(pool.authority.equals(payer.publicKey)).to.be.true;
 
     await expectAnchorError(
-      program.methods.acceptAuthority().accounts({ newAuthority: stranger.publicKey }).signers([stranger]).rpc(),
+      program.methods.acceptAuthority().accountsPartial({ newAuthority: stranger.publicKey, pool: poolPda }).signers([stranger]).rpc(),
       "Unauthorized",
     );
-    await program.methods.acceptAuthority().accounts({ newAuthority: newAuthority.publicKey }).signers([newAuthority]).rpc();
+    await program.methods.acceptAuthority().accountsPartial({ newAuthority: newAuthority.publicKey, pool: poolPda }).signers([newAuthority]).rpc();
     pool = await program.account.lockPool.fetch(poolPda);
     expect(pool.authority.equals(newAuthority.publicKey)).to.be.true;
     expect(pool.pendingAuthority.equals(PublicKey.default)).to.be.true;
@@ -426,10 +430,153 @@ describe(`xailens-lock (${TOKEN_PROGRAM.equals(TOKEN_PROGRAM_ID) ? "legacy SPL" 
     await expectAnchorError(
       program.methods
         .updatePool({ cooldownPeriod: null, discountThreshold: null, founderThreshold: null, votingThreshold: null, paused: true })
-        .accounts({ authority: payer.publicKey })
+        .accountsPartial({ authority: payer.publicKey, pool: poolPda })
         .rpc(),
       "Unauthorized",
     );
+  });
+
+  // ---------------------------------------------------------------- F1: one pool per mint (Token-2022 migration)
+
+  describe("F1: a second pool for a second mint (migration)", () => {
+    // The migration mint lives under the *other* token program.
+    const TOKEN_PROGRAM_2 = TOKEN_PROGRAM.equals(TOKEN_PROGRAM_ID) ? TOKEN_2022_PROGRAM_ID : TOKEN_PROGRAM_ID;
+    const mint2Keypair = Keypair.generate();
+    const mint2 = mint2Keypair.publicKey;
+    const [pool2] = PublicKey.findProgramAddressSync([Buffer.from("lock_pool"), mint2.toBuffer()], program.programId);
+    const [vault2] = PublicKey.findProgramAddressSync([Buffer.from("vault"), pool2.toBuffer()], program.programId);
+    const lockPda2 = (owner: PublicKey) =>
+      PublicKey.findProgramAddressSync([Buffer.from("lock"), pool2.toBuffer(), owner.toBuffer()], program.programId)[0];
+    const ata2 = (owner: PublicKey) =>
+      getAssociatedTokenAddressSync(mint2, owner, false, TOKEN_PROGRAM_2, ASSOCIATED_TOKEN_PROGRAM_ID);
+
+    before(async () => {
+      const mintLen = getMintLen([]);
+      const lamports = await connection.getMinimumBalanceForRentExemption(mintLen);
+      await provider.sendAndConfirm(
+        new Transaction().add(
+          SystemProgram.createAccount({ fromPubkey: payer.publicKey, newAccountPubkey: mint2, space: mintLen, lamports, programId: TOKEN_PROGRAM_2 }),
+          createInitializeMintInstruction(mint2, DECIMALS, payer.publicKey, null, TOKEN_PROGRAM_2),
+          createAssociatedTokenAccountInstruction(payer.publicKey, ata2(user.publicKey), user.publicKey, mint2, TOKEN_PROGRAM_2, ASSOCIATED_TOKEN_PROGRAM_ID),
+          createMintToInstruction(mint2, ata2(user.publicKey), payer.publicKey, rawBig(50_000), [], TOKEN_PROGRAM_2),
+        ),
+        [payer, mint2Keypair],
+      );
+    });
+
+    it("initializes a second pool for the second mint (upgrade authority only)", async () => {
+      await program.methods
+        .initialize({ cooldownPeriod: new BN(COOLDOWN), discountThreshold: raw(DISCOUNT), founderThreshold: raw(FOUNDER), votingThreshold: raw(VOTING) })
+        .accountsPartial({ authority: payer.publicKey, mint: mint2, pool: pool2, vault: vault2, program: program.programId, programData, tokenProgram: TOKEN_PROGRAM_2 })
+        .rpc();
+      const p2 = await program.account.lockPool.fetch(pool2);
+      expect(p2.mint.equals(mint2)).to.be.true;
+      expect(p2.vault.equals(vault2)).to.be.true;
+      // the first pool is untouched
+      const p1 = await program.account.lockPool.fetch(poolPda);
+      expect(p1.mint.equals(mint)).to.be.true;
+    });
+
+    it("keeps lock positions separate per pool", async () => {
+      const before1 = await program.account.lockAccount.fetch(lockPda(user.publicKey));
+      await program.methods
+        .lock(raw(20_000))
+        .accountsPartial({ user: user.publicKey, pool: pool2, mint: mint2, lockAccount: lockPda2(user.publicKey), userTokenAccount: ata2(user.publicKey), vault: vault2, tokenProgram: TOKEN_PROGRAM_2 })
+        .signers([user])
+        .rpc();
+      const acc2 = await program.account.lockAccount.fetch(lockPda2(user.publicKey));
+      expect(acc2.amount.toString()).to.equal(raw(20_000).toString());
+      expect(acc2.pool.equals(pool2)).to.be.true;
+      const after1 = await program.account.lockAccount.fetch(lockPda(user.publicKey));
+      expect(after1.amount.toString()).to.equal(before1.amount.toString());
+      expect((await program.account.lockPool.fetch(pool2)).totalLocked.toString()).to.equal(raw(20_000).toString());
+      expect((await getAccount(connection, vault2, "confirmed", TOKEN_PROGRAM_2)).amount).to.equal(rawBig(20_000));
+    });
+
+    it("rejects a lock account from one pool used against the other pool", async () => {
+      let failed = false;
+      try {
+        await program.methods
+          .requestUnlock()
+          .accountsPartial({ user: user.publicKey, pool: poolPda, lockAccount: lockPda2(user.publicKey) })
+          .signers([user])
+          .rpc();
+      } catch {
+        failed = true;
+      }
+      expect(failed).to.be.true;
+      const acc2 = await program.account.lockAccount.fetch(lockPda2(user.publicKey));
+      expect(acc2.unlockRequestedAt.toNumber()).to.equal(0);
+    });
+  });
+
+  // ---------------------------------------------------------------- F2/F3: initialize only accepts safe mints
+
+  describe("initialize rejects unsafe mints", () => {
+    const initFor = (m: PublicKey, tokenProgram: PublicKey) =>
+      program.methods
+        .initialize({ cooldownPeriod: new BN(COOLDOWN), discountThreshold: raw(DISCOUNT), founderThreshold: raw(FOUNDER), votingThreshold: raw(VOTING) })
+        .accountsPartial({ authority: payer.publicKey, mint: m, program: program.programId, programData, tokenProgram })
+        .rpc();
+
+    /** Create a mint under `tokenProgram`, optionally with extension init instructions placed before InitializeMint. */
+    async function makeMint(opts: {
+      tokenProgram: PublicKey;
+      decimals?: number;
+      freezeAuthority?: PublicKey | null;
+      extensions?: ExtensionType[];
+      extensionIxs?: (m: PublicKey) => anchor.web3.TransactionInstruction[];
+    }): Promise<PublicKey> {
+      const kp = Keypair.generate();
+      const len = getMintLen(opts.extensions ?? []);
+      const lamports = await connection.getMinimumBalanceForRentExemption(len);
+      const tx = new Transaction().add(
+        SystemProgram.createAccount({ fromPubkey: payer.publicKey, newAccountPubkey: kp.publicKey, space: len, lamports, programId: opts.tokenProgram }),
+        ...(opts.extensionIxs ? opts.extensionIxs(kp.publicKey) : []),
+        createInitializeMintInstruction(kp.publicKey, opts.decimals ?? DECIMALS, payer.publicKey, opts.freezeAuthority ?? null, opts.tokenProgram),
+      );
+      await provider.sendAndConfirm(tx, [payer, kp]);
+      return kp.publicKey;
+    }
+
+    it("F2: rejects a mint whose decimals are not 6", async () => {
+      const m = await makeMint({ tokenProgram: TOKEN_PROGRAM, decimals: 9 });
+      await expectAnchorError(initFor(m, TOKEN_PROGRAM), "InvalidMint");
+    });
+
+    it("F2: rejects a mint with a freeze authority (it could freeze the vault and block withdrawals)", async () => {
+      const m = await makeMint({ tokenProgram: TOKEN_PROGRAM, freezeAuthority: payer.publicKey });
+      await expectAnchorError(initFor(m, TOKEN_PROGRAM), "InvalidMint");
+    });
+
+    it("F3: rejects a Token-2022 mint with TransferFeeConfig (vault would receive less than credited)", async () => {
+      const m = await makeMint({
+        tokenProgram: TOKEN_2022_PROGRAM_ID,
+        extensions: [ExtensionType.TransferFeeConfig],
+        extensionIxs: (mk) => [createInitializeTransferFeeConfigInstruction(mk, payer.publicKey, payer.publicKey, 100, BigInt(1_000_000), TOKEN_2022_PROGRAM_ID)],
+      });
+      await expectAnchorError(initFor(m, TOKEN_2022_PROGRAM_ID), "UnsupportedMintExtension");
+    });
+
+    it("F3: rejects a Token-2022 mint with a PermanentDelegate (could drain the vault)", async () => {
+      const m = await makeMint({
+        tokenProgram: TOKEN_2022_PROGRAM_ID,
+        extensions: [ExtensionType.PermanentDelegate],
+        extensionIxs: (mk) => [createInitializePermanentDelegateInstruction(mk, payer.publicKey, TOKEN_2022_PROGRAM_ID)],
+      });
+      await expectAnchorError(initFor(m, TOKEN_2022_PROGRAM_ID), "UnsupportedMintExtension");
+    });
+
+    it("F3: still accepts a Token-2022 mint with only MetadataPointer (the planned migration mint)", async () => {
+      const m = await makeMint({
+        tokenProgram: TOKEN_2022_PROGRAM_ID,
+        extensions: [ExtensionType.MetadataPointer],
+        extensionIxs: (mk) => [createInitializeMetadataPointerInstruction(mk, payer.publicKey, mk, TOKEN_2022_PROGRAM_ID)],
+      });
+      await initFor(m, TOKEN_2022_PROGRAM_ID);
+      const [p] = PublicKey.findProgramAddressSync([Buffer.from("lock_pool"), m.toBuffer()], program.programId);
+      expect((await program.account.lockPool.fetch(p)).mint.equals(m)).to.be.true;
+    });
   });
 });
 

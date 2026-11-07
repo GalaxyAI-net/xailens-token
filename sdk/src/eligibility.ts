@@ -14,24 +14,50 @@ import {
 } from "./constants.js";
 import type { Eligibility, LockAccountInfo, LockPoolInfo } from "./types.js";
 
-/** True when `since` is set, no unlock is pending, and `holdSeconds` have elapsed by `now`. */
-export function heldFor(acc: LockAccountInfo, since: number, holdSeconds: number, now: number): boolean {
+/**
+ * True when the wallet holds at least `threshold` *right now* (current on-chain
+ * pool value, 0 = disabled), the threshold clock `since` is set, no unlock is
+ * pending, and `holdSeconds` have elapsed by `now`.
+ *
+ * The amount check matters because `update_pool` can raise a threshold after a
+ * clock started: the clock keeps its old value, so it alone proves nothing.
+ */
+export function heldFor(
+  acc: LockAccountInfo,
+  since: number,
+  threshold: bigint,
+  holdSeconds: number,
+  now: number,
+): boolean {
+  if (threshold <= 0n) return false;
+  if (acc.amount < threshold) return false;
   if (since <= 0) return false;
   if (acc.unlockRequestedAt !== 0) return false;
   return now - since >= holdSeconds;
 }
 
 /**
- * Discount for the next monthly cycle: the discount threshold must have been
- * met for at least 25 consecutive days at `now` (use the billing timestamp).
+ * Discount for the next monthly cycle: the current discount threshold must be
+ * locked and must have been met for at least 25 consecutive days at `now`
+ * (use the billing timestamp).
  */
-export function isDiscountEligible(acc: LockAccountInfo, now: number, holdSeconds = DISCOUNT_HOLD_SECONDS): boolean {
-  return heldFor(acc, acc.discountSince, holdSeconds, now);
+export function isDiscountEligible(
+  acc: LockAccountInfo,
+  pool: Pick<LockPoolInfo, "discountThreshold">,
+  now: number,
+  holdSeconds = DISCOUNT_HOLD_SECONDS,
+): boolean {
+  return heldFor(acc, acc.discountSince, pool.discountThreshold, holdSeconds, now);
 }
 
-/** Founder-level benefits use the same 25-day rule on the Founder threshold. */
-export function isFounderEligible(acc: LockAccountInfo, now: number, holdSeconds = DISCOUNT_HOLD_SECONDS): boolean {
-  return heldFor(acc, acc.founderSince, holdSeconds, now);
+/** Founder-level benefits use the same 25-day rule on the current Founder threshold. */
+export function isFounderEligible(
+  acc: LockAccountInfo,
+  pool: Pick<LockPoolInfo, "founderThreshold">,
+  now: number,
+  holdSeconds = DISCOUNT_HOLD_SECONDS,
+): boolean {
+  return heldFor(acc, acc.founderSince, pool.founderThreshold, holdSeconds, now);
 }
 
 /**
@@ -39,8 +65,7 @@ export function isFounderEligible(acc: LockAccountInfo, now: number, holdSeconds
  * with the locked amount (one vote per threshold) and are capped per wallet.
  */
 export function getVotes(acc: LockAccountInfo, pool: Pick<LockPoolInfo, "votingThreshold">, now: number, holdSeconds = VOTING_HOLD_SECONDS): number {
-  if (pool.votingThreshold <= 0n) return 0;
-  if (!heldFor(acc, acc.votingSince, holdSeconds, now)) return 0;
+  if (!heldFor(acc, acc.votingSince, pool.votingThreshold, holdSeconds, now)) return 0;
   const multiples = Number(acc.amount / pool.votingThreshold);
   return Math.min(MAX_VOTES_PER_WALLET, multiples * VOTES_PER_THRESHOLD);
 }
@@ -48,8 +73,8 @@ export function getVotes(acc: LockAccountInfo, pool: Pick<LockPoolInfo, "votingT
 export function getEligibility(acc: LockAccountInfo | null, pool: LockPoolInfo, now: number): Eligibility {
   if (!acc) return { discount: false, founder: false, votes: 0 };
   return {
-    discount: isDiscountEligible(acc, now),
-    founder: isFounderEligible(acc, now),
+    discount: isDiscountEligible(acc, pool, now),
+    founder: isFounderEligible(acc, pool, now),
     votes: getVotes(acc, pool, now),
   };
 }

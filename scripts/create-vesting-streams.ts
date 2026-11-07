@@ -11,9 +11,9 @@
  *
  * Environment variables:
  *   SOLANA_RPC_URL          - RPC endpoint (default: devnet)
+ *   SOLANA_CLUSTER          - mainnet-beta | devnet | localnet; required when the RPC URL does not reveal the cluster
  *   DEPLOYER_KEYPAIR_PATH   - sender keypair (default ~/.config/solana/id.json)
  *   XAILENS_MINT            - mint address
- *   XAILENS_TOKEN_PROGRAM   - "token2022" or "legacy" (default legacy)
  *   VESTING_CONFIG          - path to the config (default private/config/vesting.json, gitignored; see config/vesting.example.json)
  *
  * Usage:
@@ -22,7 +22,7 @@
  *   npx tsx scripts/create-vesting-streams.ts --lp-lock        # create the LP lock only
  */
 import { Connection, Keypair, PublicKey, clusterApiUrl } from "@solana/web3.js";
-import { TOKEN_2022_PROGRAM_ID, TOKEN_PROGRAM_ID } from "@solana/spl-token";
+import { requireKnownCluster, resolveCluster, tokenProgramFromOwner } from "./lib/preflight";
 import { SolanaStreamClient, ICluster, getBN, buildVestingParams, buildLockParams } from "@streamflow/stream";
 import BN from "bn.js";
 
@@ -66,13 +66,23 @@ async function main(): Promise<void> {
   if (!Number.isFinite(tge) || tge < 1_700_000_000) throw new Error("config/vesting.json: tgeTimestamp must be a unix timestamp in seconds");
 
   const rpcUrl = process.env.SOLANA_RPC_URL || clusterApiUrl("devnet");
-  const isMainnet = rpcUrl.includes("mainnet");
+  // Streamflow program ids and the output path (private/ on mainnet) depend on the cluster,
+  // so an unrecognised RPC must be declared via SOLANA_CLUSTER.
+  const cluster = requireKnownCluster(resolveCluster(rpcUrl));
+  if (cluster === "localnet") throw new Error("Streamflow is not deployed on localnet; use devnet");
+  const isMainnet = cluster === "mainnet-beta";
   const sender = loadKeypair(process.env.DEPLOYER_KEYPAIR_PATH || "~/.config/solana/id.json");
-  const tokenProgramId = process.env.XAILENS_TOKEN_PROGRAM === "token2022" ? TOKEN_2022_PROGRAM_ID : TOKEN_PROGRAM_ID;
+  const connection = new Connection(rpcUrl, "confirmed");
+  // Token program is read from each mint's owner, never from configuration.
+  const tokenProgramOf = async (m: PublicKey): Promise<PublicKey> => {
+    const info = await connection.getAccountInfo(m);
+    if (!info) throw new Error(`mint ${m.toBase58()} not found on this cluster`);
+    return tokenProgramFromOwner(info.owner);
+  };
   const client = new SolanaStreamClient(rpcUrl, isMainnet ? ICluster.Mainnet : ICluster.Devnet, "confirmed");
 
   console.log(`Sender : ${sender.publicKey.toBase58()}`);
-  console.log(`Cluster: ${isMainnet ? "mainnet-beta" : "devnet/custom"}  TGE: ${new Date(tge * 1000).toISOString()}`);
+  console.log(`Cluster: ${cluster}  TGE: ${new Date(tge * 1000).toISOString()}`);
 
   if (lpOnly) {
     const { lpMint, recipient, lpAmountRaw, lockDays } = cfg.lpLock;
@@ -84,7 +94,7 @@ async function main(): Promise<void> {
       unlockDate: tge + lockDays * DAY,
       name: "XAILENS LP lock 12m",
       transferableByRecipient: false,
-      tokenProgramId: TOKEN_PROGRAM_ID, // Raydium CPMM LP mints are legacy SPL
+      tokenProgramId: await tokenProgramOf(new PublicKey(lpMint)), // Raydium CPMM LP mints are legacy SPL
     });
     console.log(`LP lock: ${lpAmountRaw} raw LP of ${lpMint} -> ${recipient}, unlock ${new Date((tge + lockDays * DAY) * 1000).toISOString()}`);
     if (dryRun) return;
@@ -97,6 +107,7 @@ async function main(): Promise<void> {
   const mintStr = process.env.XAILENS_MINT;
   if (!mintStr) throw new Error("Set XAILENS_MINT");
   const mint = new PublicKey(mintStr);
+  const tokenProgramId = await tokenProgramOf(mint);
 
   const plan: Array<{ bucket: string; r: Recipient; cliffAmount: BN; total: BN; cliffAt: number; endAt: number }> = [];
   for (const b of cfg.buckets) {

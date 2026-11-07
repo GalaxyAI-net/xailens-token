@@ -18,6 +18,8 @@ export interface LockPoolInfo {
 /** Decoded `LockAccount` for one wallet. All timestamps are unix seconds, 0 = unset. */
 export interface LockAccountInfo {
   owner: PublicKey;
+  /** Pool (one per mint) this position belongs to. */
+  pool: PublicKey;
   amount: bigint;
   lockedSince: number;
   lastDepositAt: number;

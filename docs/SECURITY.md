@@ -9,9 +9,9 @@ Status: **pre-deployment**. Everything below is the target state. Each item has 
 | Authority | Target state at TGE | How it gets there | How to verify |
 | --- | --- | --- | --- |
 | Mint authority | Revoked (null) | `scripts/revoke-authority.ts --mint` right after the 500M mint, same session | `scripts/verify-authorities.ts`, Solana Explorer mint page |
-| Freeze authority | Never set | `scripts/setup-metadata.ts create` passes `null` | same |
+| Freeze authority | Never set | `scripts/create-mint-legacy.ts` (launch path) and `scripts/setup-metadata.ts create` (Token-2022 migration mint) both pass `null`; `xailens-lock` `initialize` rejects a mint with a freeze authority | same |
 | Metadata update authority | Token-2022: revoked (null). Legacy SPL: metadata immutable at creation, no authority | `scripts/revoke-authority.ts --metadata` (Token-2022) or `scripts/create-mint-legacy.ts` (`isMutable = false`) | same |
-| `xailens-lock` upgrade authority | Squads 2-of-3 at launch; set to **none (immutable)** after a 14-day bake period on mainnet with no findings from the public review (section 4) | `solana program set-upgrade-authority` to the Squads vault, later `--final` | `scripts/verify-authorities.ts` with `LOCK_PROGRAM_ID`, `solana program show` |
+| `xailens-lock` upgrade authority | Squads 2-of-3 from launch **until the Token-2022 migration pool exists**; then set to **none (immutable)** after a 14-day bake period of that pool with no open findings (section 4). It cannot go immutable earlier: `initialize` only accepts the upgrade authority, so after `--final` no pool could ever be created for the Token-2022 mint (TOKENOMICS 1.1) | `solana program set-upgrade-authority` to the Squads vault at launch; after the migration pool is initialised and baked, `--final` | `scripts/verify-authorities.ts` with `LOCK_PROGRAM_ID`, `solana program show` |
 | `xailens-lock` pool authority | Squads multisig | `propose_authority` from deployer, `accept_authority` executed by the multisig | `LockPool.authority` field |
 | Deployer wallet `3qqAyWYZ3vGNA2nHw25Yp1bR3eiGRRmfjLgT3S7eWdne` | Holds nothing of value after distribution | `scripts/distribute.ts` then Streamflow stream creation | Token account balances |
 
@@ -33,20 +33,20 @@ Rules: no two signers on the same hardware or in the same physical location for 
 
 ## 3. Program security model
 
-Source: `programs/xailens-lock/src/lib.rs`. One pool PDA, one vault PDA, one `LockAccount` PDA per wallet.
+Source: `programs/xailens-lock/src/lib.rs`. One pool PDA per mint (`["lock_pool", mint]`), one vault PDA per pool (`["vault", pool]`), one `LockAccount` PDA per wallet and pool (`["lock", pool, owner]`). The launch (legacy SPL) mint and the Token-2022 migration mint each get their own pool; positions never mix.
 
 Invariants an auditor should confirm:
 
 1. Tokens can only leave the vault through `withdraw` to the lock owner's own token account. There is no admin withdrawal path.
 2. `withdraw` is never gated by `paused`. Pause only blocks `lock`.
 3. The cooldown of a pending unlock is snapshotted in the `LockAccount`; `update_pool` cannot extend it. The cooldown itself is capped at 30 days.
-4. `initialize` requires the signer to be the program's upgrade authority (ProgramData check) and can run only once (fixed seed). No front-running.
+4. `initialize` requires the signer to be the program's upgrade authority (ProgramData check) and can run only once per mint (seed includes the mint). No front-running. It only accepts a mint with 6 decimals, no freeze authority (a frozen vault would block withdrawals), and, for Token-2022, no extension outside the allow-list (metadata, group, mint-close-authority); transfer fees, transfer hooks, permanent delegates, default-frozen state, non-transferable and confidential transfers are rejected.
 5. Authority transfer is two-step; the pending authority must sign to accept.
 6. Threshold clocks (`discount_since`, `founder_since`, `voting_since`) start when a threshold is first met, never move backwards on top-ups, and reset on `request_unlock` and `withdraw`.
 7. All arithmetic is checked; the pool's `total_locked` equals the sum of all `LockAccount.amount`.
 8. The program emits no tokens and holds no reward vault.
 
-Known accepted limitations: a wallet can only have one lock position; partial withdrawal is not supported (unlock is all-or-nothing); the program does not enforce the 25-day or 6-month periods itself, the SDK and server do, so the off-chain reader is part of the trust model.
+Known accepted limitations: a wallet can only have one lock position per pool; partial withdrawal is not supported (unlock is all-or-nothing); the program does not enforce the 25-day or 6-month periods itself, the SDK and server do, so the off-chain reader is part of the trust model. `update_pool` can change thresholds after clocks started: the SDK therefore requires `amount >= current threshold` (and threshold > 0) in addition to the clock, and a wallet that only qualifies after a threshold is *lowered* gets its clock on its next `lock` (minimum 1 XAILENS).
 
 ---
 
@@ -54,9 +54,9 @@ Known accepted limitations: a wallet can only have one lock position; partial wi
 
 Decision (2026-10-28): the project will not commission a paid third-party audit before launch. Security assurance instead rests on:
 
-1. A deliberately small program: eight instructions, no reward arithmetic, no admin withdrawal path, no pausable withdrawals.
+1. A deliberately small program: eight instructions, no reward arithmetic, no admin withdrawal path, no pausable withdrawals, no mint that could freeze or tax the vault.
 2. Open source with a pinned, reproducible build (`Cargo.lock`, `package-lock.json`, Anchor 0.31.1); the deployed `.so` hash must match a `solana-verify` build so anyone can confirm the code on-chain is the code in this repository.
-3. The integration test suite in `tests/` (28 cases) covering every instruction, every error path, pause semantics, cooldown snapshot and authority transfer; the SDK unit tests covering the entitlement rules.
+3. The integration test suite in `tests/` (45 cases, run on both legacy SPL and Token-2022) covering every instruction, every error path, pause semantics, cooldown snapshot, authority transfer, one pool per mint, unsafe-mint rejection and the script preflight; the SDK unit tests (17) covering the entitlement rules against current pool thresholds, the program id and token-program detection.
 4. A public review window before mainnet: the program runs on devnet for 30 days (2026-10-28 to 2026-11-27) with a published invitation to review; findings are tracked as GitHub issues and fixed before mainnet.
 5. Immutable upgrade authority after a 14-day mainnet bake period with no open findings.
 6. A community bug bounty funded from the ecosystem bucket once the token is live (amounts TODO, TOKENOMICS D1).
@@ -85,7 +85,7 @@ Deliverables requested: findings with severity, PoC for anything High or above, 
 - Deployer key on a hardware wallet, used for the TGE runbook only, then emptied.
 - No personal data of team members or subscribers is stored in on-chain metadata or program accounts.
 - No private keys, RPC URLs with API keys, or `.env` files in the repository (`.gitignore` covers `*keypair*.json`, `.env*`, `id.json`).
-- Scripts default to devnet, redact RPC URLs in output, and require an interactive "yes" on mainnet.
+- Scripts default to devnet, redact RPC URLs in output, and require an interactive "yes" on mainnet and on any RPC URL that does not reveal its cluster (paid RPC URLs often do not); `SOLANA_CLUSTER` declares the cluster explicitly, and scripts that use cluster-specific addresses (Streamflow, USDC) refuse to run until it is set. Token programs are always read from the mint owner, never from configuration.
 - Server-side balance verification: the platform reads lock accounts via its own RPC. Frontend-supplied balances or signatures are never used for entitlements.
 - **Trading signals are never published on the XAILENS token, in token metadata, in program events, or in any on-chain data.** Signals stay inside the subscription product. The token repository, SDK and docs contain no signal, strategy or trade data.
 
